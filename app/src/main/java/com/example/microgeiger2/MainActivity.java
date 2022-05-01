@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
+import android.view.WindowManager;
 
 import java.text.DecimalFormat;
 
@@ -86,6 +87,8 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         panel=new Panel(this);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         //setContentView(R.layout.activity_main);
         setContentView(panel);
         handler=new Handler();

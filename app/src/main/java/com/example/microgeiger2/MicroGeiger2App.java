@@ -95,7 +95,7 @@ public class MicroGeiger2App extends Application {
 			short data[]=new short[data_size];
 			short playback_data[]=new short[data_size];
 			try {
-				recorder = new AudioRecord(AudioSource.MIC, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, data_size);
+				recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, data_size);
 			}catch(SecurityException ex) {
 				Log.d(TAG, "No audio permission");
 				return;
