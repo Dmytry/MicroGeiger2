@@ -132,13 +132,52 @@ public class MainActivity extends AppCompatActivity {
             super(context);
         }
 
+        public float CountToY(float count){
+            if(count<1.0f)count=0.5f;
+            float y = (float) Math.log10(count)/5.0f;
+            return y;
+        }
+
         public void RedrawControl(android.graphics.Canvas canvas){
             if(app==null)return;
             Paint p=new Paint();
             p.setColor(Color.WHITE);
             p.setTextSize(30);
+
+            Paint p_grid=new Paint();
+            p_grid.setColor(Color.rgb(255,255,0));
+            p_grid.setTextSize(20);
+
+            Paint p_grid_m=new Paint();
+            p_grid_m.setColor(Color.rgb(100,100,0));
+
+
             int ypos=50;
             int ydelta=60;
+            int w=canvas.getWidth();
+            int h=canvas.getHeight();
+            int px_per_tick=5;
+
+            int x_steps=(int)(w*0.9f)/px_per_tick;
+
+            float x_scale=px_per_tick;
+            float x_offset=(w-x_steps*x_scale)*0.75f;
+
+            float y_scale=-h*0.9f;
+            float y_offset=h*0.95f;
+
+            canvas.drawLine(x_offset, y_offset, x_offset, y_offset+y_scale, p_grid);
+
+            for(int i=0; i<=5; ++i) {
+                float y=y_offset+(i/5.0f)*y_scale;
+                canvas.drawLine(0, y, canvas.getWidth(), y, p_grid);
+                double base_num=Math.pow(10f, i);
+                canvas.drawText(Integer.toString((int)base_num), 10, y-3, p_grid);
+                for(int j=2; j<10; ++j) {
+                    y=y_offset+CountToY(j*(float)base_num)*y_scale;
+                    canvas.drawLine(x_offset, y, x_offset+x_scale*x_steps, y, p_grid_m);
+                }
+            }
             if(app.connected){
                 canvas.drawText(Integer.toString(app.total_count)+" total", 10, ypos, p);
                 ypos+=ydelta;
@@ -147,24 +186,23 @@ public class MainActivity extends AppCompatActivity {
                     ypos+=ydelta;
                 }
                 int log_total_samples=app.counts_log.size();
+
                 if(log_total_samples>0){
-                    final float graph_x_scale=5.0f;
-                    final float graph_y_scale=5.0f;
-                    int graph_width=(int)(canvas.getWidth()/graph_x_scale);
+                    int graph_width=x_steps;
                     int log_first_sample=log_total_samples-graph_width;
                     if(log_first_sample<0){
                         log_first_sample=0;
                         graph_width=log_total_samples;
                     }
-                    int h=canvas.getHeight();
-                    float prev_y=app.counts_log.get(log_first_sample);
+                    float prev_y=CountToY(app.counts_log.get(log_first_sample));
                     for(int i=1; i<graph_width;++i){
-                        //canvas.drawRect(i,h,i+1,h-app.counts_log.get(i+log_first_sample), p);
-                        float y=app.counts_log.get(i+log_first_sample);
-                        canvas.drawLine((i-1)*graph_x_scale, h-prev_y*graph_y_scale, i*graph_x_scale, h-y*graph_y_scale, p);
+                        float count=app.counts_log.get(i+log_first_sample);
+                        float y = CountToY(count);
+                        canvas.drawLine((i-1)*x_scale+x_offset, prev_y*y_scale+y_offset, i*x_scale+x_offset, y*y_scale+y_offset, p);
                         prev_y=y;
                     }
                 }
+
             }else{
                 canvas.drawText("MicroGeiger not connected.", 10, ypos, p);
             }

@@ -25,8 +25,12 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder.AudioSource;
+import android.media.MicrophoneInfo;
 import android.preference.PreferenceManager;
 import android.util.Log;
+
+import java.io.IOException;
+import java.util.List;
 
 public class MicroGeiger2App extends Application {
 	private static final String TAG = "MicroGeiger";
@@ -78,6 +82,10 @@ public class MicroGeiger2App extends Application {
 			double threshold=0.1;
 			double running_avg=0.0;
 			double running_avg_const=0.0001;
+			double rms_avg=0.0;
+			double peak_meter=0.1;
+			double peak_meter_decay=100.0/sample_rate;
+
 			float click_volume=1.0f;
 			int dead_countdown=0;
 			int click_countdown=0;
@@ -130,16 +138,38 @@ public class MicroGeiger2App extends Application {
 			            if (recorder.getRecordingState()== AudioRecord.RECORDSTATE_STOPPED){
 			                 recorder.startRecording();
 			            }else{
-			            	if( ((AudioManager)getApplicationContext().getSystemService(Context.AUDIO_SERVICE)).isWiredHeadsetOn()){
+			            	boolean is_peripheral=false;
+			            	boolean checked_peripheral=false;
+			            	try{
+								if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+									List<MicrophoneInfo> microphones=recorder.getActiveMicrophones();
+									for(MicrophoneInfo m: microphones) {
+										int l=m.getLocation();
+										if(l==MicrophoneInfo.LOCATION_UNKNOWN || l==MicrophoneInfo.LOCATION_PERIPHERAL) {
+											is_peripheral=true;
+										}
+									}
+									checked_peripheral=true;
+								}
+			            	}catch(IOException e) {
+								Log.d(TAG, "Failed to query connected microphones");
+							}
+
+			            	// if we were unable to determine if microphone is peripheral, fallback to wired headset check
+							if(!checked_peripheral) {
+								is_peripheral=((AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE)).isWiredHeadsetOn();
+							}
+
+							if( is_peripheral ){
 			            		if(!connected)changed=true;
 			            		connected=true;
-				            	int read_size=recorder.read(data,0,data_size);    	
-				            	
-				            	
+				            	int read_size=recorder.read(data,0,data_size);
+
+
 				            	int old_total_count=total_count;
 				            	for(int i=0; i<read_size; ++i){
 				            		if(dead_countdown>0){
-				            			dead_countdown--;		            			
+				            			dead_countdown--;
 				            		}
 				            		if(click_countdown>0){
 				            			click_countdown--;
@@ -150,7 +180,7 @@ public class MicroGeiger2App extends Application {
 				            		sample_update_counter++;
 				            		if(sample_update_counter>=samples_per_update){
 				            			for(int j=0;j<counters.length;++j){
-				            				counters[j].push(sample_count);			            				
+				            				counters[j].push(sample_count);
 				            			}
 				            			sample_update_counter=0;
 				            			sample_count=0;
@@ -158,7 +188,7 @@ public class MicroGeiger2App extends Application {
 				            		}
 				            		double raw_v=data[i]*(1.0/32768.0);
 				            		running_avg=running_avg*(1.0-running_avg_const)+raw_v*running_avg_const;
-				            		double v=raw_v-running_avg;				            		
+				            		double v=raw_v-running_avg;
 				            		if(v>threshold || v<-threshold){
 				            			if(dead_countdown<=0){
 				            				total_count++;
@@ -166,8 +196,8 @@ public class MicroGeiger2App extends Application {
 				            				log_interval_click_count++;
 				            				dead_countdown=dead_time;
 				            				click_countdown=click_duration;
-				            				
-				            			}		            			
+
+				            			}
 				            		}
 				            		if(log_countdown<=0){
 				            			log_countdown=log_interval;
@@ -177,12 +207,23 @@ public class MicroGeiger2App extends Application {
 				            		log_countdown--;
 				            	}
 				            	if(old_total_count!=total_count){
-				            		changed=true;			            		
+				            		changed=true;
 				            	}
 				            	if(click_volume>0.001)player.write(playback_data,0,read_size);
 			            	}else{/// wired headset is not on
 			            		if(connected)changed=true;
 			            		connected=false;
+			            		if(recorder!=null) {
+									recorder.stop();
+									recorder.release();
+								}
+								Thread.sleep(500);
+								try {
+									recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, data_size);
+								}catch(SecurityException ex) {
+									Log.d(TAG, "No audio permission");
+									return;
+								}
 			            		Thread.sleep(500);
 			            	}
 				    	}
@@ -191,9 +232,7 @@ public class MicroGeiger2App extends Application {
 				    	Thread.sleep(5000);
 				    }
 			    }
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+			} catch (InterruptedException e){
 			}
 		    finally{
 		    	recorder.stop();
