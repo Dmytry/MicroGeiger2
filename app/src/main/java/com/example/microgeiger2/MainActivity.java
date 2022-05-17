@@ -133,7 +133,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         public float CountToY(float count){
-            if(count<1.0f)count=0.5f;
+            if(count<10) {
+                return count/50.0f;
+            }
             float y = (float) Math.log10(count)/5.0f;
             return y;
         }
@@ -143,6 +145,7 @@ public class MainActivity extends AppCompatActivity {
             Paint p=new Paint();
             p.setColor(Color.WHITE);
             p.setTextSize(30);
+            p.setStyle(Paint.Style.FILL);
 
             Paint p_grid=new Paint();
             p_grid.setColor(Color.rgb(255,255,0));
@@ -167,11 +170,25 @@ public class MainActivity extends AppCompatActivity {
             float y_offset=h*0.95f;
 
             canvas.drawLine(x_offset, y_offset, x_offset, y_offset+y_scale, p_grid);
+            canvas.drawLine(x_offset+x_scale*x_steps, y_offset, x_offset+x_scale*x_steps, y_offset+y_scale, p_grid);
 
-            for(int i=0; i<=5; ++i) {
-                float y=y_offset+(i/5.0f)*y_scale;
-                canvas.drawLine(0, y, canvas.getWidth(), y, p_grid);
+            Boolean bars=true;
+
+            canvas.drawLine(0, y_offset, x_offset+x_scale*x_steps, y_offset, p_grid);
+
+            for(int j=0; j<10; ++j) {
+                float y=y_offset+CountToY(j)*y_scale;
+                canvas.drawLine(x_offset, y, x_offset+x_scale*x_steps, y, p_grid_m);
+            }
+
+            canvas.drawLine(0, y_offset, x_offset+x_scale*x_steps, y_offset, p_grid);
+            canvas.drawText("0", 10, y_offset-3, p_grid);
+
+            for(int i=1; i<=5; ++i) {
                 double base_num=Math.pow(10f, i);
+                float y=y_offset+(i/5.0f)*y_scale;
+                canvas.drawLine(0, y, x_offset+x_scale*x_steps, y, p_grid);
+
                 canvas.drawText(Integer.toString((int)base_num), 10, y-3, p_grid);
                 for(int j=2; j<10; ++j) {
                     y=y_offset+CountToY(j*(float)base_num)*y_scale;
@@ -179,12 +196,17 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             if(app.connected){
-                canvas.drawText(Integer.toString(app.total_count)+" total", 10, ypos, p);
+                p.setTextAlign(Paint.Align.LEFT);
+                canvas.drawText(decim.format(app.GetQueueCPM())+" CPM", w/10, ypos, p);
+                p.setTextAlign(Paint.Align.RIGHT);
+                canvas.drawText(Integer.toString(app.total_count)+" total", w-w/10, ypos, p);
+
+                /*
                 ypos+=ydelta;
                 for(int i=0;i<app.counters.length;++i){
                     canvas.drawText(decim.format(app.counters[i].getValue())+" "+app.counters[i].name, 10, ypos, p);
                     ypos+=ydelta;
-                }
+                }*/
                 int log_total_samples=app.counts_log.size();
 
                 if(log_total_samples>0){
@@ -198,7 +220,18 @@ public class MainActivity extends AppCompatActivity {
                     for(int i=1; i<graph_width;++i){
                         float count=app.counts_log.get(i+log_first_sample);
                         float y = CountToY(count);
-                        canvas.drawLine((i-1)*x_scale+x_offset, prev_y*y_scale+y_offset, i*x_scale+x_offset, y*y_scale+y_offset, p);
+                        if(bars) {
+                            if(count>0) {
+                                canvas.drawRect((i - 1) * x_scale + x_offset,
+                                        y * y_scale + y_offset,
+                                        i * x_scale + x_offset,
+                                        y_offset,
+                                        p
+                                );
+                            }
+                        }else {
+                            canvas.drawLine((i - 1) * x_scale + x_offset, prev_y * y_scale + y_offset, i * x_scale + x_offset, y * y_scale + y_offset, p);
+                        }
                         prev_y=y;
                     }
                 }

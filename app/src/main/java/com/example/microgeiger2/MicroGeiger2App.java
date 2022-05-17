@@ -30,13 +30,20 @@ import android.preference.PreferenceManager;
 import android.util.Log;
 
 import java.io.IOException;
+import java.util.Deque;
+import java.util.LinkedList;
 import java.util.List;
 
 public class MicroGeiger2App extends Application {
 	private static final String TAG = "MicroGeiger";
 	public volatile int total_count=0;
+	public final int min_clicks_in_queue=100;
+	public final float min_smoothing_duration_sec=0.5f;
+
 	public final int sample_rate=44100;
 	public final int counters_update_rate=2;/// sample rate must be divisible by counters update rate
+
+	public volatile long total_sample_count=0;
 	
 	public final int log_interval=5*sample_rate;/// logging interval in samples
 	public java.util.Vector<Integer> counts_log=new java.util.Vector<Integer>();
@@ -71,7 +78,40 @@ public class MicroGeiger2App extends Application {
 		}
 	}
 	public volatile Counter counters[];
-	
+
+	public class Click{
+		public long time_in_samples=0;
+	}
+
+	public volatile Deque<Click> last_n_clicks=new LinkedList<Click>();
+
+	void AppendClick(long time_in_samples){
+		Click c=new Click();
+		c.time_in_samples=time_in_samples;
+		synchronized(last_n_clicks) {
+			last_n_clicks.addLast(c);
+		}
+	}
+	void TrimQueue(long time_in_samples) {
+		long cutoff=time_in_samples-(long)(min_smoothing_duration_sec*sample_rate);
+		synchronized(last_n_clicks){
+			while(last_n_clicks.size() > min_clicks_in_queue && last_n_clicks.getFirst().time_in_samples<cutoff) {
+				last_n_clicks.removeFirst();
+			}
+		}
+	}
+
+	float GetQueueCPM(){
+		synchronized(last_n_clicks){
+			if(last_n_clicks.size()==0)return 0;
+			long sc=total_sample_count;
+			long duration_in_samples=sc-last_n_clicks.getFirst().time_in_samples;
+			if(duration_in_samples<=0)return 0;
+			long count=last_n_clicks.size();
+			return count*sample_rate*60.0f/duration_in_samples;
+		}
+	}
+
   
     private class Listener implements Runnable{
     	public volatile boolean do_stop=false;
@@ -168,6 +208,7 @@ public class MicroGeiger2App extends Application {
 
 				            	int old_total_count=total_count;
 				            	for(int i=0; i<read_size; ++i){
+									total_sample_count++;
 				            		if(dead_countdown>0){
 				            			dead_countdown--;
 				            		}
@@ -196,7 +237,8 @@ public class MicroGeiger2App extends Application {
 				            				log_interval_click_count++;
 				            				dead_countdown=dead_time;
 				            				click_countdown=click_duration;
-
+				            				AppendClick(total_sample_count);
+				            				TrimQueue(total_sample_count);
 				            			}
 				            		}
 				            		if(log_countdown<=0){
@@ -206,6 +248,8 @@ public class MicroGeiger2App extends Application {
 				            		}
 				            		log_countdown--;
 				            	}
+								TrimQueue(total_sample_count);
+
 				            	if(old_total_count!=total_count){
 				            		changed=true;
 				            	}
