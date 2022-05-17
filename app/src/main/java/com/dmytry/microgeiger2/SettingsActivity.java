@@ -1,7 +1,9 @@
-package com.example.microgeiger2;
+package com.dmytry.microgeiger2;
 
 import android.os.Bundle;
 import android.preference.PreferenceActivity;
+
+import com.dmytry.microgeiger2.R;
 
 public class SettingsActivity extends PreferenceActivity {
 	@Override

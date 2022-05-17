@@ -1,4 +1,4 @@
-package com.example.microgeiger2;
+package com.dmytry.microgeiger2;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -15,6 +15,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
 import android.view.WindowManager;
+
+import com.dmytry.microgeiger2.R;
 
 import java.text.DecimalFormat;
 

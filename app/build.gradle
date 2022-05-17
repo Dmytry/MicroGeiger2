@@ -6,7 +6,7 @@ android {
     compileSdk 32
 
     defaultConfig {
-        applicationId "com.example.microgeiger2"
+        applicationId "com.dmytry.microgeiger2"
         minSdk 21
         targetSdk 32
         versionCode 1
