@@ -45,7 +45,7 @@ public class MicroGeiger2App extends Application {
 
 	public volatile long total_sample_count=0;
 	
-	public final int log_interval=5*sample_rate;/// logging interval in samples
+	public final int log_interval=6*sample_rate;/// logging interval in samples
 	public java.util.Vector<Integer> counts_log=new java.util.Vector<Integer>();
 	public int log_countdown=0, log_interval_click_count=0;
 	

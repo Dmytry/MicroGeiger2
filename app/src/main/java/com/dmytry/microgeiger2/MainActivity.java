@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.icu.number.NumberFormatter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.Menu;
@@ -142,7 +143,14 @@ public class MainActivity extends AppCompatActivity {
             return y;
         }
 
+        String LabelFormat(int n){
+            if(n>=1000000)return Integer.toString(n/1000000)+"M";
+            if(n>=1000)return Integer.toString(n/1000)+"K";
+            return Integer.toString(n);
+        }
+
         public void RedrawControl(android.graphics.Canvas canvas){
+
             if(app==null)return;
             Paint p=new Paint();
             p.setColor(Color.WHITE);
@@ -155,15 +163,16 @@ public class MainActivity extends AppCompatActivity {
             p.setStyle(Paint.Style.FILL);
 
             Paint p_grid=new Paint();
-            p_grid.setColor(Color.rgb(255,255,0));
+            p_grid.setColor(Color.rgb(255,180,0));
             p_grid.setTextSize(20);
             p_grid.setTextAlign(Paint.Align.RIGHT);
+            p_grid.setStrokeWidth(2);
+
+            Paint p_grid_half=new Paint();
+            p_grid_half.setColor(Color.rgb(255,180,0));
 
             Paint p_grid_m=new Paint();
-            p_grid_m.setColor(Color.rgb(100,100,0));
-
-
-
+            p_grid_m.setColor(Color.rgb(100,60,0));
 
             int px_per_tick=5;
 
@@ -175,30 +184,47 @@ public class MainActivity extends AppCompatActivity {
             float y_scale=-h*0.9f;
             float y_offset=h*0.97f;
 
+            int count_to_cpm_scale=10;
+
+            // Outer box for graph
             canvas.drawLine(x_offset, y_offset, x_offset, y_offset+y_scale, p_grid);
             canvas.drawLine(x_offset+x_scale*x_steps, y_offset, x_offset+x_scale*x_steps, y_offset+y_scale, p_grid);
+            canvas.drawLine(x_offset, y_offset, x_offset+x_scale*x_steps, y_offset, p_grid);
+            canvas.drawLine(x_offset, y_offset+y_scale, x_offset+x_scale*x_steps, y_offset+y_scale, p_grid);
 
             Boolean bars=true;
 
-            canvas.drawLine(0, y_offset, x_offset+x_scale*x_steps, y_offset, p_grid);
-
-            for(int j=0; j<10; ++j) {
+            // Linear 1..9 scale
+            for(int j=1; j<10; ++j) {
                 float y=y_offset+CountToY(j)*y_scale;
-                canvas.drawLine(x_offset, y, x_offset+x_scale*x_steps, y, p_grid_m);
+                canvas.drawLine(x_offset, y, x_offset+x_scale*x_steps, y,  j==5 ?  p_grid_half: p_grid_m);
             }
 
-            canvas.drawLine(0, y_offset, x_offset+x_scale*x_steps, y_offset, p_grid);
-            canvas.drawText("0", x_offset-5, y_offset-3, p_grid);
 
+            float text_y_offset=0.5f*(p_grid.descent()+p_grid.ascent());
+
+            canvas.drawText("0", x_offset-5, y_offset-text_y_offset, p_grid);
+            canvas.drawText("50", x_offset - 5, y_offset+CountToY(5)*y_scale-text_y_offset, p_grid);
+
+
+
+            // Main ticks for log scale, starting at 10
             for(int i=1; i<=5; ++i) {
-                double base_num=Math.pow(10f, i);
-                float y=y_offset+(i/5.0f)*y_scale;
-                canvas.drawLine(0, y, x_offset+x_scale*x_steps, y, p_grid);
+                double base_num = Math.pow(10f, i);
+                float y = y_offset + (i / 5.0f) * y_scale;
+                canvas.drawLine(x_offset, y, x_offset + x_scale * x_steps, y, p_grid);
+                canvas.drawText(LabelFormat((int) base_num * count_to_cpm_scale), x_offset - 5, y - text_y_offset, p_grid);
+                if (i < 5) {
+                    for (int j = 2; j < 10; ++j) {
+                        y = y_offset + CountToY(j * (float) base_num) * y_scale;
+                        canvas.drawLine(x_offset, y, x_offset + x_scale * x_steps, y, j==5 ?  p_grid_half: p_grid_m);
+                    }
 
-                canvas.drawText(Integer.toString((int)base_num), x_offset-5, y-3, p_grid);
-                if(i<5)for(int j=2; j<10; ++j) {
-                    y=y_offset+CountToY(j*(float)base_num)*y_scale;
-                    canvas.drawLine(x_offset, y, x_offset+x_scale*x_steps, y, p_grid_m);
+                    // Labels for a few ticks
+                    for (int j = 2; j < 6; ++j) {
+                        y = y_offset + CountToY((float)(j * base_num)) * y_scale;
+                        canvas.drawText(LabelFormat((int) (j * base_num * count_to_cpm_scale)), x_offset - 5, y - text_y_offset, p_grid);
+                    }
                 }
             }
 
