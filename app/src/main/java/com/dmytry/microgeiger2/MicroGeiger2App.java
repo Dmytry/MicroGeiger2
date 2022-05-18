@@ -143,8 +143,10 @@ public class MicroGeiger2App extends Application {
 			int data_size=Math.max(sample_rate/4, min_buffer_size);
 			short data[]=new short[data_size];
 			short playback_data[]=new short[data_size*2];
+
+			int recorder_buffer_size_bytes=4*Math.max(sample_rate/10, min_buffer_size);
 			try {
-				recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, 4*Math.max(sample_rate/10, min_buffer_size));
+				recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, recorder_buffer_size_bytes);
 			}catch(SecurityException ex) {
 				Log.d(TAG, "No audio permission");
 				return;
@@ -294,7 +296,7 @@ public class MicroGeiger2App extends Application {
 								}
 								Thread.sleep(500);
 								try {
-									recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, 4*data_size);
+									recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, recorder_buffer_size_bytes);
 								}catch(SecurityException ex) {
 									Log.d(TAG, "No audio permission");
 									return;
