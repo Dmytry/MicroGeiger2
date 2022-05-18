@@ -26,6 +26,7 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder.AudioSource;
 import android.media.MicrophoneInfo;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
@@ -131,19 +132,19 @@ public class MicroGeiger2App extends Application {
 			int click_countdown=0;
 			
 			int click_duration=40;
-			int click_beep_divisor=10;
+			int click_beep_divisor=20;
 			
 			int sample_update_counter=0;
 			int sample_count=0;
-			int record_min_buffer_size=AudioRecord.getMinBufferSize(sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+			int record_min_buffer_size=AudioRecord.getMinBufferSize(sample_rate, AudioFormat.CHANNEL_OUT_FRONT_LEFT | AudioFormat.CHANNEL_OUT_FRONT_RIGHT, AudioFormat.ENCODING_PCM_16BIT);
 			int play_min_buffer_size=AudioTrack.getMinBufferSize(sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
 			int min_buffer_size=Math.max(record_min_buffer_size, play_min_buffer_size);
 			
-			int data_size=Math.max(sample_rate/20, min_buffer_size);
+			int data_size=Math.max(sample_rate/4, min_buffer_size);
 			short data[]=new short[data_size];
-			short playback_data[]=new short[data_size];
+			short playback_data[]=new short[data_size*2];
 			try {
-				recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, data_size);
+				recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, 4*Math.max(sample_rate/10, min_buffer_size));
 			}catch(SecurityException ex) {
 				Log.d(TAG, "No audio permission");
 				return;
@@ -152,8 +153,10 @@ public class MicroGeiger2App extends Application {
 			
 			final AudioTrack player = new AudioTrack(AudioManager.STREAM_RING,
 					sample_rate, /* AudioFormat.CHANNEL_OUT_MONO */ AudioFormat.CHANNEL_OUT_FRONT_LEFT | AudioFormat.CHANNEL_OUT_FRONT_RIGHT,
-	                AudioFormat.ENCODING_PCM_16BIT, data_size,
+	                AudioFormat.ENCODING_PCM_16BIT, 4*data_size,
 	                AudioTrack.MODE_STREAM);
+
+			Log.d(TAG, "Output channels: "+player.getChannelCount());
 	        player.play();
 			
 			try{
@@ -171,7 +174,7 @@ public class MicroGeiger2App extends Application {
 			    	try{
 			    		click_volume=Float.parseFloat(prefs.getString("click_volume", "1.0"));
 			    	}catch(NumberFormatException e){			    	
-			    	}  	
+			    	}
 			    	
 			    	
 			    	if (recorder.getState()== AudioRecord.STATE_INITIALIZED){ // check to see if the recorder has initialized yet.
@@ -203,7 +206,10 @@ public class MicroGeiger2App extends Application {
 							if( is_peripheral ){
 			            		if(!connected)changed=true;
 			            		connected=true;
-				            	int read_size=recorder.read(data,0,data_size);
+								long start_t_ = SystemClock.elapsedRealtime();
+				            	int read_size = recorder.read(data,0,data_size, AudioRecord.READ_NON_BLOCKING);
+								long end_t_ = SystemClock.elapsedRealtime();
+								Log.d(TAG, "Read: "+read_size+" duration="+(end_t_-start_t_)+" t="+end_t_);
 
 
 				            	int old_total_count=total_count;
@@ -214,9 +220,15 @@ public class MicroGeiger2App extends Application {
 				            		}
 				            		if(click_countdown>0){
 				            			click_countdown--;
-				            			playback_data[i]=(short) (Math.exp((click_volume-1.0)*Math.log(10000))*((click_countdown/click_beep_divisor)%2 == 1 ? 32767:-32767));
+				            			playback_data[i*2]=(short) (Math.exp((click_volume-1.0)*Math.log(10000))*((click_countdown/click_beep_divisor)%2 == 1 ? 32767:-32767));
+										playback_data[i*2+1]=playback_data[i*2];
 				            		}else{
-				            			playback_data[i]=0;
+				            			//playback_data[i]=0;
+										// test beep
+										//short beep=(short)((total_sample_count/40)%2 == 1 ? 1000:-1000);
+										short beep=0;
+										playback_data[i*2]=beep;
+										playback_data[i*2+1]=beep;
 				            		}
 				            		sample_update_counter++;
 				            		if(sample_update_counter>=samples_per_update){
@@ -236,7 +248,7 @@ public class MicroGeiger2App extends Application {
 				            				sample_count++;
 				            				log_interval_click_count++;
 				            				dead_countdown=dead_time;
-				            				click_countdown=click_duration;
+				            				if(click_countdown<=0)click_countdown=click_duration;
 				            				AppendClick(total_sample_count);
 				            				TrimQueue(total_sample_count);
 				            			}
@@ -253,7 +265,26 @@ public class MicroGeiger2App extends Application {
 				            	if(old_total_count!=total_count){
 				            		changed=true;
 				            	}
-				            	if(click_volume>0.001)player.write(playback_data,0,read_size);
+				            	if(click_volume>0.001) {
+				            		long start_t= SystemClock.elapsedRealtime();
+				            		int how_much_to_write=read_size*2;
+				            		// hack to reduce amount of buffering
+									// read was more than 1/10th of a second, skip some writing
+				            		if(read_size>4410) {
+				            			how_much_to_write-=16;
+									}
+				            		how_much_to_write-=2;
+				            		int wrote_size=0;
+				            		if(how_much_to_write>0) {
+										wrote_size = player.write(playback_data, 0, how_much_to_write);// , AudioTrack.WRITE_NON_BLOCKING
+									}
+									long end_t= SystemClock.elapsedRealtime();
+									Log.d(TAG, "Time to write: "+(end_t-start_t));
+									/*
+									if(wrote_size<read_size) {
+										Log.d(TAG, "Wrote: " + wrote_size + " Wanted to write"+read_size);
+									}*/
+								}
 			            	}else{/// wired headset is not on
 			            		if(connected)changed=true;
 			            		connected=false;
@@ -263,7 +294,7 @@ public class MicroGeiger2App extends Application {
 								}
 								Thread.sleep(500);
 								try {
-									recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, data_size);
+									recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, 4*data_size);
 								}catch(SecurityException ex) {
 									Log.d(TAG, "No audio permission");
 									return;
