@@ -23,6 +23,7 @@ import android.content.SharedPreferences;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.media.AudioRouting;
 import android.media.AudioTrack;
 import android.media.MediaRecorder.AudioSource;
 import android.media.MicrophoneInfo;
@@ -129,7 +130,7 @@ public class MicroGeiger2App extends Application {
 	}
 
   
-    public class Listener implements Runnable{
+    public class Listener implements Runnable, AudioRouting.OnRoutingChangedListener, SharedPreferences.OnSharedPreferenceChangeListener{
     	public volatile boolean do_stop=false;
 
 		IIRFilter filter=new IIRFilter();
@@ -142,14 +143,10 @@ public class MicroGeiger2App extends Application {
 
 		AudioTrack player;
 
-		int dead_time=sample_rate/2000;
-		double threshold=0.1;
+		volatile int dead_time=sample_rate/2000;
+		volatile double threshold=0.1;
 		// High pass filter , peak is reached in 3 samples
-		double rms_avg=0.0;
-		double peak_meter=0.1;
-		double peak_meter_decay=100.0/sample_rate;
-
-		float click_volume=1.0f;
+		volatile float click_volume=1.0f;
 		int dead_countdown=0;
 		int click_countdown=0;
 
@@ -158,6 +155,8 @@ public class MicroGeiger2App extends Application {
 
 		int sample_update_counter=0;
 		int sample_count=0;
+
+		volatile boolean is_peripheral=false;
 
 		final short getFromBufferAt(int i){
 			i%=input_buffer.length;
@@ -201,7 +200,11 @@ public class MicroGeiger2App extends Application {
 
 
 		@Override
-		public void run() {	
+		public void run() {
+
+			SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
+			sharedPref.registerOnSharedPreferenceChangeListener(this);
+			getParametersFromConfig();
 
 			int record_min_buffer_size=AudioRecord.getMinBufferSize(sample_rate, AudioFormat.CHANNEL_OUT_FRONT_LEFT | AudioFormat.CHANNEL_OUT_FRONT_RIGHT, AudioFormat.ENCODING_PCM_16BIT);
 			int play_min_buffer_size=AudioTrack.getMinBufferSize(sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
@@ -216,6 +219,9 @@ public class MicroGeiger2App extends Application {
 			int recorder_buffer_size_bytes=4*Math.max(sample_rate/10, min_buffer_size);
 			try {
 				recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, recorder_buffer_size_bytes);
+
+				recorder.addOnRoutingChangedListener(this, null);
+
 			}catch(SecurityException ex) {
 				Log.d(TAG, "No audio permission");
 				return;
@@ -230,14 +236,15 @@ public class MicroGeiger2App extends Application {
 	        player.play();
 
 			try{
+				is_peripheral = checkIfPeripheralIsConnected();
 			    while(!do_stop){
-					getParametersFromConfig();
+					//getParametersFromConfig();
 					if (recorder.getState()== AudioRecord.STATE_INITIALIZED){ // check to see if the recorder has initialized yet.
 			            if (recorder.getRecordingState()== AudioRecord.RECORDSTATE_STOPPED){
 			                 recorder.startRecording();
 			            }else{
 			            	// This is slow for some reason, todo: use events instead
-							boolean is_peripheral = checkIfPeripheralIsConnected();
+
 
 							if( is_peripheral ){
 			            		if(!connected)change_count++;
@@ -249,7 +256,7 @@ public class MicroGeiger2App extends Application {
 								int read_size = readAtLeast(recorder, 4410, input_buffer.length);//readIntoBuffer(recorder, input_buffer.length);
 
 								long end_t_ = SystemClock.elapsedRealtime();
-								Log.d(TAG, "Read: "+read_size+" duration="+(end_t_-start_t_)+" t="+end_t_);
+								//Log.d(TAG, "Read: "+read_size+" duration="+(end_t_-start_t_)+" t="+end_t_);
 				            	int old_total_count=total_count;
 				            	processInputDataAndGenerateClicks(read_size, playback_buffer);
 								TrimQueue(total_sample_count);
@@ -267,11 +274,13 @@ public class MicroGeiger2App extends Application {
 								Thread.sleep(500);
 								try {
 									recorder = new AudioRecord(AudioSource.DEFAULT, sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, recorder_buffer_size_bytes);
+									recorder.addOnRoutingChangedListener(this, null);
 								}catch(SecurityException ex) {
 									Log.d(TAG, "No audio permission");
 									return;
 								}
 			            		Thread.sleep(500);
+								is_peripheral = checkIfPeripheralIsConnected();
 			            	}
 				    	}
 			    	}else{
@@ -304,7 +313,7 @@ public class MicroGeiger2App extends Application {
 					wrote_size = player.write(playback_buffer, 0, how_much_to_write);// , AudioTrack.WRITE_NON_BLOCKING
 				}
 				long end_t= SystemClock.elapsedRealtime();
-				Log.d(TAG, "Time to write: "+(end_t-start_t));
+				//Log.d(TAG, "Time to write: "+(end_t-start_t));
 			}
 		}
 
@@ -361,6 +370,12 @@ public class MicroGeiger2App extends Application {
 			}
 		}
 
+		@Override
+		public void onRoutingChanged(AudioRouting audioRouting) {
+			Log.d(TAG, "Routing changed!");
+			is_peripheral=checkIfPeripheralIsConnected();
+		}
+
 		private boolean checkIfPeripheralIsConnected() {
 			boolean is_peripheral=false;
 			boolean checked_peripheral=false;
@@ -399,6 +414,11 @@ public class MicroGeiger2App extends Application {
 				click_volume=prefs.getInt("int_click_volume2", 100)/100.0f;
 			}catch(NumberFormatException e){
 			}
+		}
+
+		@Override
+		public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
+			getParametersFromConfig();
 		}
 	}
     
