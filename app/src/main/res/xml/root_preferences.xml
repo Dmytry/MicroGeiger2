@@ -1,0 +1,11 @@
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <EditTextPreference
+        android:defaultValue="false"
+        android:inputType="numberDecimal"
+        android:key="threshold"
+        android:persistent="true"
+        android:summary="@string/threshold_summary"
+        android:title="@string/threshold" />
+    <EditTextPreference android:title="@string/dead_time" android:defaultValue="0.5" android:inputType="numberDecimal" android:summary="@string/dead_time_summary" android:key="dead_time" android:persistent="true"/>
+    <SeekBarPreference android:title="@string/click_volume" android:max="100" android:defaultValue="100" android:summary="@string/click_volume_summary" android:key="int_click_volume2"/>
+</PreferenceScreen>

@@ -396,7 +396,7 @@ public class MicroGeiger2App extends Application {
 			}catch(NumberFormatException e){
 			}
 			try{
-				click_volume=Float.parseFloat(prefs.getString("click_volume", "1.0"));
+				click_volume=prefs.getInt("int_click_volume2", 100)/100.0f;
 			}catch(NumberFormatException e){
 			}
 		}

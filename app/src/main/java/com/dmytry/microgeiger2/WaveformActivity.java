@@ -1,33 +1,21 @@
 package com.dmytry.microgeiger2;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.os.Bundle;
-
-import com.google.android.material.snackbar.Snackbar;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.os.Handler;
 import android.view.Menu;
-import android.view.View;
-
-import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
-import androidx.navigation.ui.AppBarConfiguration;
-import androidx.navigation.ui.NavigationUI;
-
-import com.dmytry.microgeiger2.databinding.ActivityWaveformViewBinding;
+import android.view.MenuItem;
 
 import java.text.DecimalFormat;
 import java.util.Iterator;
 
-public class WaveformView extends AppCompatActivity {
-
-    private AppBarConfiguration appBarConfiguration;
-    private ActivityWaveformViewBinding binding;
-
+public class WaveformActivity extends AppCompatActivity {
     Handler handler;
     boolean stop_handler=false;
 
@@ -40,6 +28,35 @@ public class WaveformView extends AppCompatActivity {
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
+
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle item selection
+        switch (item.getItemId()) {
+            case R.id.action_quit:
+                app.stop();
+                finish();
+                return true;
+            case R.id.action_reset:
+                app.reset();
+                return true;
+            case R.id.action_settings: {
+                Intent i = new Intent(this, SettingsActivity.class);
+                startActivity(i);
+                return true;
+            }
+            case R.id.action_waveforms: {
+                Intent i = new Intent(this, WaveformActivity.class);
+                startActivity(i);
+                //startActivityForResult(i, RESULT_SETTINGS);
+                return true;
+            }
+            default:
+                return super.onOptionsItemSelected(item);
+        }
+    }
+
 
     int change_count=0;
 
@@ -71,13 +88,6 @@ public class WaveformView extends AppCompatActivity {
     protected void onDestroy() {
         stop_handler=true;
         super.onDestroy();
-    }
-
-    @Override
-    public boolean onSupportNavigateUp() {
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_waveform_view);
-        return NavigationUI.navigateUp(navController, appBarConfiguration)
-                || super.onSupportNavigateUp();
     }
 
 

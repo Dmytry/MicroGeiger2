@@ -9,15 +9,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.icu.number.NumberFormatter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
 import android.view.WindowManager;
-
-import com.dmytry.microgeiger2.R;
 
 import java.text.DecimalFormat;
 
@@ -50,11 +47,12 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             case R.id.action_settings: {
                 Intent i = new Intent(this, SettingsActivity.class);
-                startActivityForResult(i, RESULT_SETTINGS);
+                //startActivityForResult(i, RESULT_SETTINGS);
+                startActivity(i);
                 return true;
             }
             case R.id.action_waveforms: {
-                Intent i = new Intent(this, WaveformView.class);
+                Intent i = new Intent(this, WaveformActivity.class);
                 startActivity(i);
                 //startActivityForResult(i, RESULT_SETTINGS);
                 return true;
@@ -102,8 +100,6 @@ public class MainActivity extends AppCompatActivity {
         //setContentView(R.layout.activity_main);
         setContentView(panel);
         handler=new Handler();
-
-
 
         if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissionLauncher.launch(

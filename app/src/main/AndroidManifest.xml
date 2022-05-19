@@ -13,10 +13,19 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MicroGeiger2">
         <activity
-            android:name=".WaveformView"
+            android:name=".SettingsActivity"
             android:exported="false"
-            android:label="@string/title_activity_waveform_view"
-            android:theme="@style/Theme.MicroGeiger2.NoActionBar" />
+            android:label="@string/title_activity_settings">
+            <intent-filter>
+                <action android:name=".Preferences" />
+
+                <category android:name="android.intent.category.PREFERENCE" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".WaveformActivity"
+            android:exported="false"
+            android:label="@string/title_activity_waveform_view" />
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -24,15 +33,6 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false">
-            <intent-filter>
-                <action android:name=".Preferences" />
-
-                <category android:name="android.intent.category.PREFERENCE" />
             </intent-filter>
         </activity>
     </application>

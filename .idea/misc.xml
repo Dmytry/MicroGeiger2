@@ -12,8 +12,11 @@
         <entry key="app/src/main/res/layout/content_waveform_view.xml" value="0.27240861291937907" />
         <entry key="app/src/main/res/layout/fragment_first.xml" value="0.4266304347826087" />
         <entry key="app/src/main/res/layout/fragment_second.xml" value="0.4266304347826087" />
+        <entry key="app/src/main/res/layout/settings_activity.xml" value="0.325" />
         <entry key="app/src/main/res/menu/main.xml" value="0.83125" />
         <entry key="app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" value="0.525" />
+        <entry key="app/src/main/res/xml/root_preferences.xml" value="0.5142857142857143" />
+        <entry key="app/src/main/res/xml/settings.xml" value="0.5142857142857143" />
       </map>
     </option>
   </component>
