@@ -209,7 +209,7 @@ public class MicroGeiger2App extends Application {
 			
 			int data_size=Math.max(sample_rate/4, min_buffer_size);
 			// Store about 160 seconds in circular buffer for the waveform viewer, power of 2 so that wraparound of sample numbers isn't a problem
-			input_buffer=new short[Math.max(data_size,1024*1024*16)];
+			input_buffer=new short[Math.max(data_size,1024*1024)];
 			current_offset=0;
 			playback_buffer =new short[data_size*2];
 
