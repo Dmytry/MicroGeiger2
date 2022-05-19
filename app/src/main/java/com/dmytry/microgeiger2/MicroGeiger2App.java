@@ -37,6 +37,8 @@ import java.util.List;
 
 public class MicroGeiger2App extends Application {
 	private static final String TAG = "MicroGeiger";
+	static final float running_avg_const=0.25f;
+
 	public volatile int total_count=0;
 	public final int min_clicks_in_queue=100;
 	public final float min_smoothing_duration_sec=0.5f;
@@ -51,9 +53,22 @@ public class MicroGeiger2App extends Application {
 	public int log_countdown=0, log_interval_click_count=0;
 	
 	public final int samples_per_update=sample_rate/counters_update_rate;
-	public volatile boolean changed=false;
+
+	//public volatile boolean changed=false;
+	public volatile int change_count=0;
+
 	boolean started=false;
 	boolean connected=false;
+
+	static public class IIRFilter{
+		float running_avg=0;
+		float get_value(float normalized_in){
+			float v=normalized_in-running_avg;
+			running_avg=running_avg*(1.0f-running_avg_const)+normalized_in*running_avg_const;
+			return v;
+		}
+	}
+
 	public class Counter{
 		public int counts[];
 		public int pos=0;		
@@ -72,7 +87,7 @@ public class MicroGeiger2App extends Application {
 			count-=counts[pos];
 			counts[pos]=n;
 			count+=n;
-			if(count!=old_count)changed=true;
+			if(count!=old_count)change_count++;
 		}
 		double getValue(){
 			return scale*count;
@@ -80,7 +95,7 @@ public class MicroGeiger2App extends Application {
 	}
 	public volatile Counter counters[];
 
-	public class Click{
+	static public class Click{
 		public long time_in_samples=0;
 	}
 
@@ -114,35 +129,89 @@ public class MicroGeiger2App extends Application {
 	}
 
   
-    private class Listener implements Runnable{
+    public class Listener implements Runnable{
     	public volatile boolean do_stop=false;
+
+		IIRFilter filter=new IIRFilter();
+
+    	int current_offset=0;
+		public short input_buffer[];
+		short playback_buffer[];
+
+		AudioRecord recorder;
+
+		AudioTrack player;
+
+		int dead_time=sample_rate/2000;
+		double threshold=0.1;
+		// High pass filter , peak is reached in 3 samples
+		double rms_avg=0.0;
+		double peak_meter=0.1;
+		double peak_meter_decay=100.0/sample_rate;
+
+		float click_volume=1.0f;
+		int dead_countdown=0;
+		int click_countdown=0;
+
+		int click_duration=40;
+		int click_beep_divisor=20;
+
+		int sample_update_counter=0;
+		int sample_count=0;
+
+		final short getFromBufferAt(int i){
+			i%=input_buffer.length;
+			if(i<0)i+=input_buffer.length;
+			return input_buffer[i];
+		}
+
+		// Circular buffer reading
+		// Returns how many bytes were read
+		int readIntoBuffer(AudioRecord recorder, int wanted_read, boolean blocking) { // int read_size = recorder.read(input_buffer,0,data_size, AudioRecord.READ_NON_BLOCKING);
+			// sanitize
+			if(wanted_read>input_buffer.length)wanted_read=input_buffer.length;
+
+			int max_read_size=wanted_read;
+			// Are we wrapping around the buffer?
+			Boolean partial=max_read_size > input_buffer.length-current_offset;
+			if(partial) {
+				max_read_size=input_buffer.length-current_offset;
+			}
+			int bytes_read=recorder.read(input_buffer, current_offset, max_read_size,  blocking ? AudioRecord.READ_BLOCKING : AudioRecord.READ_NON_BLOCKING);
+
+			int new_offset=current_offset+bytes_read;
+			// Wraparound
+			if(new_offset>=input_buffer.length){
+				new_offset=0;
+				if(partial){// Wraparound and read was partial, need another read
+					bytes_read+=recorder.read(input_buffer, new_offset, wanted_read-bytes_read, blocking ? AudioRecord.READ_BLOCKING : AudioRecord.READ_NON_BLOCKING);
+				}
+			}
+			return bytes_read;
+		}
+
+		// Blocking read for min_read plus queue emptying up to max_read
+		int readAtLeast(AudioRecord recorder, int min_read, int max_read){
+			int result=readIntoBuffer(recorder, min_read, true);
+			if(result<max_read) {
+				result+=readIntoBuffer(recorder, max_read-result, false);
+			}
+			return result;
+		}
+
+
 		@Override
 		public void run() {	
-			AudioRecord recorder;			
-			int dead_time=sample_rate/2000;
-			double threshold=0.1;
-			double running_avg=0.0;
-			double running_avg_const=0.0001;
-			double rms_avg=0.0;
-			double peak_meter=0.1;
-			double peak_meter_decay=100.0/sample_rate;
 
-			float click_volume=1.0f;
-			int dead_countdown=0;
-			int click_countdown=0;
-			
-			int click_duration=40;
-			int click_beep_divisor=20;
-			
-			int sample_update_counter=0;
-			int sample_count=0;
 			int record_min_buffer_size=AudioRecord.getMinBufferSize(sample_rate, AudioFormat.CHANNEL_OUT_FRONT_LEFT | AudioFormat.CHANNEL_OUT_FRONT_RIGHT, AudioFormat.ENCODING_PCM_16BIT);
 			int play_min_buffer_size=AudioTrack.getMinBufferSize(sample_rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
 			int min_buffer_size=Math.max(record_min_buffer_size, play_min_buffer_size);
 			
 			int data_size=Math.max(sample_rate/4, min_buffer_size);
-			short data[]=new short[data_size];
-			short playback_data[]=new short[data_size*2];
+			// Store about 160 seconds in circular buffer for the waveform viewer, power of 2 so that wraparound of sample numbers isn't a problem
+			input_buffer=new short[Math.max(data_size,1024*1024*16)];
+			current_offset=0;
+			playback_buffer =new short[data_size*2];
 
 			int recorder_buffer_size_bytes=4*Math.max(sample_rate/10, min_buffer_size);
 			try {
@@ -151,144 +220,45 @@ public class MicroGeiger2App extends Application {
 				Log.d(TAG, "No audio permission");
 				return;
 			}
-			
-			
-			final AudioTrack player = new AudioTrack(AudioManager.STREAM_RING,
+
+			player = new AudioTrack(AudioManager.STREAM_RING,
 					sample_rate, /* AudioFormat.CHANNEL_OUT_MONO */ AudioFormat.CHANNEL_OUT_FRONT_LEFT | AudioFormat.CHANNEL_OUT_FRONT_RIGHT,
 	                AudioFormat.ENCODING_PCM_16BIT, 4*data_size,
 	                AudioTrack.MODE_STREAM);
 
 			Log.d(TAG, "Output channels: "+player.getChannelCount());
 	        player.play();
-			
+
 			try{
 			    while(!do_stop){
-			    	SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
-			    	try{
-			    		threshold=Double.parseDouble(prefs.getString("threshold", ""));
-			    	}catch(NumberFormatException e){			    	
-			    	}
-			    	try{
-			    		dead_time=(int)(0.001*sample_rate*Double.parseDouble(prefs.getString("dead_time", "")));
-			    	}catch(NumberFormatException e){			    	
-			    	}
-			    	
-			    	try{
-			    		click_volume=Float.parseFloat(prefs.getString("click_volume", "1.0"));
-			    	}catch(NumberFormatException e){			    	
-			    	}
-			    	
-			    	
-			    	if (recorder.getState()== AudioRecord.STATE_INITIALIZED){ // check to see if the recorder has initialized yet.
+					getParametersFromConfig();
+					if (recorder.getState()== AudioRecord.STATE_INITIALIZED){ // check to see if the recorder has initialized yet.
 			            if (recorder.getRecordingState()== AudioRecord.RECORDSTATE_STOPPED){
 			                 recorder.startRecording();
 			            }else{
-			            	boolean is_peripheral=false;
-			            	boolean checked_peripheral=false;
-			            	try{
-								if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-									List<MicrophoneInfo> microphones=recorder.getActiveMicrophones();
-									for(MicrophoneInfo m: microphones) {
-										int l=m.getLocation();
-										if(l==MicrophoneInfo.LOCATION_UNKNOWN || l==MicrophoneInfo.LOCATION_PERIPHERAL) {
-											is_peripheral=true;
-										}
-									}
-									checked_peripheral=true;
-								}
-			            	}catch(IOException e) {
-								Log.d(TAG, "Failed to query connected microphones");
-							}
-
-			            	// if we were unable to determine if microphone is peripheral, fallback to wired headset check
-							if(!checked_peripheral) {
-								is_peripheral=((AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE)).isWiredHeadsetOn();
-							}
+			            	// This is slow for some reason, todo: use events instead
+							boolean is_peripheral = checkIfPeripheralIsConnected();
 
 							if( is_peripheral ){
-			            		if(!connected)changed=true;
+			            		if(!connected)change_count++;
 			            		connected=true;
 								long start_t_ = SystemClock.elapsedRealtime();
-				            	int read_size = recorder.read(data,0,data_size, AudioRecord.READ_NON_BLOCKING);
+				            	//int read_size = recorder.read(input_buffer,0,data_size, AudioRecord.READ_NON_BLOCKING);
+
+								// read at least 0.1 seconds of audio
+								int read_size = readAtLeast(recorder, 4410, input_buffer.length);//readIntoBuffer(recorder, input_buffer.length);
+
 								long end_t_ = SystemClock.elapsedRealtime();
 								Log.d(TAG, "Read: "+read_size+" duration="+(end_t_-start_t_)+" t="+end_t_);
-
-
 				            	int old_total_count=total_count;
-				            	for(int i=0; i<read_size; ++i){
-									total_sample_count++;
-				            		if(dead_countdown>0){
-				            			dead_countdown--;
-				            		}
-				            		if(click_countdown>0){
-				            			click_countdown--;
-				            			playback_data[i*2]=(short) (Math.exp((click_volume-1.0)*Math.log(10000))*((click_countdown/click_beep_divisor)%2 == 1 ? 32767:-32767));
-										playback_data[i*2+1]=playback_data[i*2];
-				            		}else{
-				            			//playback_data[i]=0;
-										// test beep
-										//short beep=(short)((total_sample_count/40)%2 == 1 ? 1000:-1000);
-										short beep=0;
-										playback_data[i*2]=beep;
-										playback_data[i*2+1]=beep;
-				            		}
-				            		sample_update_counter++;
-				            		if(sample_update_counter>=samples_per_update){
-				            			for(int j=0;j<counters.length;++j){
-				            				counters[j].push(sample_count);
-				            			}
-				            			sample_update_counter=0;
-				            			sample_count=0;
-				            			//Log.d(TAG, "got a sample");
-				            		}
-				            		double raw_v=data[i]*(1.0/32768.0);
-				            		running_avg=running_avg*(1.0-running_avg_const)+raw_v*running_avg_const;
-				            		double v=raw_v-running_avg;
-				            		if(v>threshold || v<-threshold){
-				            			if(dead_countdown<=0){
-				            				total_count++;
-				            				sample_count++;
-				            				log_interval_click_count++;
-				            				dead_countdown=dead_time;
-				            				if(click_countdown<=0)click_countdown=click_duration;
-				            				AppendClick(total_sample_count);
-				            				TrimQueue(total_sample_count);
-				            			}
-				            		}
-				            		if(log_countdown<=0){
-				            			log_countdown=log_interval;
-				            			counts_log.add(log_interval_click_count);
-				            			log_interval_click_count=0;
-				            		}
-				            		log_countdown--;
-				            	}
+				            	processInputDataAndGenerateClicks(read_size, playback_buffer);
 								TrimQueue(total_sample_count);
-
 				            	if(old_total_count!=total_count){
-				            		changed=true;
+									change_count++;
 				            	}
-				            	if(click_volume>0.001) {
-				            		long start_t= SystemClock.elapsedRealtime();
-				            		int how_much_to_write=read_size*2;
-				            		// hack to reduce amount of buffering
-									// read was more than 1/10th of a second, skip some writing
-				            		if(read_size>4410) {
-				            			how_much_to_write-=16;
-									}
-				            		how_much_to_write-=2;
-				            		int wrote_size=0;
-				            		if(how_much_to_write>0) {
-										wrote_size = player.write(playback_data, 0, how_much_to_write);// , AudioTrack.WRITE_NON_BLOCKING
-									}
-									long end_t= SystemClock.elapsedRealtime();
-									Log.d(TAG, "Time to write: "+(end_t-start_t));
-									/*
-									if(wrote_size<read_size) {
-										Log.d(TAG, "Wrote: " + wrote_size + " Wanted to write"+read_size);
-									}*/
-								}
-			            	}else{/// wired headset is not on
-			            		if(connected)changed=true;
+								playOutputSounds(read_size);
+							}else{/// wired headset is not on
+			            		if(connected)change_count++;
 			            		connected=false;
 			            		if(recorder!=null) {
 									recorder.stop();
@@ -318,6 +288,118 @@ public class MicroGeiger2App extends Application {
 		    	player.release();
 		    }
 		}
+
+		private void playOutputSounds(int read_size) {
+			if(click_volume>0.001) {
+				long start_t= SystemClock.elapsedRealtime();
+				int how_much_to_write= read_size *2;
+				// hack to reduce amount of buffering
+				// read was more than 1/10th of a second, skip some writing
+				if(read_size >4410) {
+					how_much_to_write-=16;
+				}
+				how_much_to_write-=2;
+				int wrote_size=0;
+				if(how_much_to_write>0) {
+					wrote_size = player.write(playback_buffer, 0, how_much_to_write);// , AudioTrack.WRITE_NON_BLOCKING
+				}
+				long end_t= SystemClock.elapsedRealtime();
+				Log.d(TAG, "Time to write: "+(end_t-start_t));
+			}
+		}
+
+		private void processInputDataAndGenerateClicks(int read_size, short[] playback_data) {
+			for(int i = 0; i < read_size; ++i, ++current_offset){
+				if(current_offset>=input_buffer.length)current_offset=0;
+				total_sample_count++;
+				if(dead_countdown>0){
+					dead_countdown--;
+				}
+				if(i*2+1<playback_data.length) {
+					if (click_countdown > 0) {
+						click_countdown--;
+						playback_data[i * 2] = (short) (Math.exp((click_volume - 1.0) * Math.log(10000)) * ((click_countdown / click_beep_divisor) % 2 == 1 ? 32767 : -32767));
+						playback_data[i * 2 + 1] = playback_data[i * 2];
+					} else {
+						//playback_data[i]=0;
+						// test beep
+						//short beep=(short)((total_sample_count/40)%2 == 1 ? 1000:-1000);
+						short beep = 0;
+						playback_data[i * 2] = beep;
+						playback_data[i * 2 + 1] = beep;
+					}
+				}
+				sample_update_counter++;
+				if(sample_update_counter>=samples_per_update){
+					for(int j=0;j<counters.length;++j){
+						counters[j].push(sample_count);
+					}
+					sample_update_counter=0;
+					sample_count=0;
+					//Log.d(TAG, "got a sample");
+				}
+				float raw_v=input_buffer[current_offset]*(1.0f/32768.0f);
+				float v=filter.get_value(raw_v);
+
+				if(/* v>threshold || */ v<-threshold){
+					if(dead_countdown<=0){
+						total_count++;
+						sample_count++;
+						log_interval_click_count++;
+						dead_countdown=dead_time;
+						if(click_countdown<=0)click_countdown=click_duration;
+						AppendClick(total_sample_count);
+						TrimQueue(total_sample_count);
+					}
+				}
+				if(log_countdown<=0){
+					log_countdown=log_interval;
+					counts_log.add(log_interval_click_count);
+					log_interval_click_count=0;
+				}
+				log_countdown--;
+			}
+		}
+
+		private boolean checkIfPeripheralIsConnected() {
+			boolean is_peripheral=false;
+			boolean checked_peripheral=false;
+			try{
+				if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+					List<MicrophoneInfo> microphones=recorder.getActiveMicrophones();
+					for(MicrophoneInfo m: microphones) {
+						int l=m.getLocation();
+						if(l==MicrophoneInfo.LOCATION_UNKNOWN || l==MicrophoneInfo.LOCATION_PERIPHERAL) {
+							is_peripheral=true;
+						}
+					}
+					checked_peripheral=true;
+				}
+			}catch(IOException e) {
+				Log.d(TAG, "Failed to query connected microphones");
+			}
+			// if we were unable to determine if microphone is peripheral, fallback to wired headset check
+			if(!checked_peripheral) {
+				is_peripheral=((AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE)).isWiredHeadsetOn();
+			}
+			return is_peripheral;
+		}
+
+		private void getParametersFromConfig() {
+			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
+			try{
+				threshold=Double.parseDouble(prefs.getString("threshold", ""));
+			}catch(NumberFormatException e){
+			}
+			try{
+				dead_time=(int)(0.001*sample_rate*Double.parseDouble(prefs.getString("dead_time", "")));
+			}catch(NumberFormatException e){
+			}
+			try{
+				click_volume=Float.parseFloat(prefs.getString("click_volume", "1.0"));
+			}catch(NumberFormatException e){
+			}
+		}
 	}
     
     Listener listener;
@@ -345,7 +427,7 @@ public class MicroGeiger2App extends Application {
     void reset(){
     	total_count=0;
     	init_counters();
-    	changed=true;
+		change_count++;
     }
     void stop(){
     	if(listener!=null){

@@ -48,10 +48,17 @@ public class MainActivity extends AppCompatActivity {
             case R.id.action_reset:
                 app.reset();
                 return true;
-            case R.id.action_settings:
+            case R.id.action_settings: {
                 Intent i = new Intent(this, SettingsActivity.class);
                 startActivityForResult(i, RESULT_SETTINGS);
                 return true;
+            }
+            case R.id.action_waveforms: {
+                Intent i = new Intent(this, WaveformView.class);
+                startActivity(i);
+                //startActivityForResult(i, RESULT_SETTINGS);
+                return true;
+            }
             default:
                 return super.onOptionsItemSelected(item);
         }
@@ -84,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-
+    int change_count=0;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -111,9 +118,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (!stop_handler) {
-                    if(app.changed){
+                    if(app.change_count!=change_count){
                         panel.invalidate();
-                        app.changed=false;
+                        change_count=app.change_count;
                     }
                     handler.postDelayed(this, 100);
                 }
