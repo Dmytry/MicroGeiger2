@@ -198,16 +198,20 @@ class MicroGeiger2App : Application() {
         }
 
         override fun run() {
+            Log.d(TAG, "Run");
             val sharedPref = PreferenceManager.getDefaultSharedPreferences(applicationContext)
             sharedPref.registerOnSharedPreferenceChangeListener(this)
             parametersFromConfig
+
             val record_min_buffer_size = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_FRONT_LEFT or AudioFormat.CHANNEL_OUT_FRONT_RIGHT, AudioFormat.ENCODING_PCM_16BIT)
             val play_min_buffer_size = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             val min_buffer_size = Math.max(record_min_buffer_size, play_min_buffer_size)
+
             val data_size = max(sampleRate / 4, min_buffer_size)
             // Store about 160 seconds in circular buffer for the waveform viewer, power of 2 so that wraparound of sample numbers isn't a problem
             inputBuffer = ShortArray(Math.max(data_size, 1024 * 1024))
             currentOffset = 0
+            totalSampleCount = 0
             playbackBuffer = ShortArray(data_size * 2)
             val recorder_buffer_size_bytes = 4 * max(sampleRate / 10, min_buffer_size)
             try {
@@ -305,8 +309,6 @@ class MicroGeiger2App : Application() {
             var i = 0
             var click_v = (Math.exp((clickVolume - 1.0) * Math.log(10000.0)) * 32767).toInt().toShort()
             while (i < read_size) {
-                if (currentOffset >= inputBuffer.size) currentOffset = 0
-                totalSampleCount++
                 if (deadCountdown > 0) {
                     deadCountdown--
                 }
@@ -354,6 +356,8 @@ class MicroGeiger2App : Application() {
                 logCountdown--
                 ++i
                 ++currentOffset
+                if (currentOffset >= inputBuffer.size) currentOffset = 0
+                ++totalSampleCount
             }
         }
 
