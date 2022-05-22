@@ -121,7 +121,11 @@ class MicroGeiger2App : Application() {
             if (lastNClicks.size == 0) return 0.0f
             val sc = totalSampleCount
             val duration_in_samples = sc - lastNClicks.first.timeInSamples
-            if (duration_in_samples <= 0) return 0.0f
+            if (duration_in_samples < 0){
+                lastNClicks.clear()
+                return 0.0f
+            }
+            if (duration_in_samples == 0L) return 0.0f
             val count = lastNClicks.size.toLong()
             return count * sampleRate * 60.0f / duration_in_samples
         }
@@ -212,6 +216,7 @@ class MicroGeiger2App : Application() {
             inputBuffer = ShortArray(Math.max(data_size, 1024 * 1024))
             currentOffset = 0
             totalSampleCount = 0
+            lastNClicks.clear()
             playbackBuffer = ShortArray(data_size * 2)
             val recorder_buffer_size_bytes = 4 * max(sampleRate / 10, min_buffer_size)
             try {
@@ -442,6 +447,7 @@ class MicroGeiger2App : Application() {
         totalCount = 0
         initCounters()
         changeCount++
+        lastNClicks.clear()
     }
 
     fun stop() {
