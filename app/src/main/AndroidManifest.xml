@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.dmytry.microgeiger2">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
@@ -14,6 +13,7 @@
         android:theme="@style/Theme.MicroGeiger2">
         <activity
             android:name=".SettingsActivity"
+            android:parentActivityName=".MainActivity"
             android:exported="false"
             android:label="@string/title_activity_settings">
             <intent-filter>
@@ -24,6 +24,7 @@
         </activity>
         <activity
             android:name=".WaveformActivity"
+            android:parentActivityName=".MainActivity"
             android:exported="false"
             android:label="@string/title_activity_waveform_view" />
         <activity

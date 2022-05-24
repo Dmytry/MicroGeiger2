@@ -72,7 +72,7 @@ class MicroGeiger2App : Application() {
         var scale = 1.0
         var name: String
         fun push(n: Int) {
-            pos = pos + 1
+            pos++;
             if (pos >= counts.size) pos = 0
             val old_count = count
             count -= counts[pos]

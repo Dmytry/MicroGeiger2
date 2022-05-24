@@ -31,8 +31,10 @@ class MainActivity : AppCompatActivity() {
         // Handle item selection
         return when (item.itemId) {
             R.id.action_quit -> {
+                //app?.stop()
+                //finish()
+                finishAndRemoveTask();
                 app?.stop()
-                finish()
                 true
             }
             R.id.action_reset -> {

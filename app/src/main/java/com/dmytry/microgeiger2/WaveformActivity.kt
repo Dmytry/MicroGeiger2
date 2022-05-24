@@ -29,7 +29,6 @@ class WaveformActivity : AppCompatActivity() {
         // Handle item selection
         return when (item.itemId) {
             R.id.action_quit -> {
-                app!!.stop()
                 finish()
                 true
             }
