@@ -1,7 +1,6 @@
 package com.dmytry.microgeiger2
 
 import android.content.Context
-import androidx.appcompat.app.AppCompatActivity
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
@@ -11,6 +10,7 @@ import android.os.Handler
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.appcompat.app.AppCompatActivity
 import com.dmytry.microgeiger2.MicroGeiger2App.IIRFilter
 import java.text.DecimalFormat
 
@@ -113,12 +113,36 @@ class WaveformActivity : AppCompatActivity() {
 
             // Outer box for graph
             canvas.drawLine(x_offset, y_offset, x_offset, y_offset + y_scale, p_grid)
-            canvas.drawLine(x_offset + x_scale * length_to_display, y_offset, x_offset + x_scale * length_to_display, y_offset + y_scale, p_grid)
-            canvas.drawLine(x_offset, y_offset, x_offset + x_scale * length_to_display, y_offset, p_grid)
-            canvas.drawLine(x_offset, y_offset + y_scale, x_offset + x_scale * length_to_display, y_offset + y_scale, p_grid)
+            canvas.drawLine(
+                x_offset + x_scale * length_to_display,
+                y_offset,
+                x_offset + x_scale * length_to_display,
+                y_offset + y_scale,
+                p_grid
+            )
+            canvas.drawLine(
+                x_offset,
+                y_offset,
+                x_offset + x_scale * length_to_display,
+                y_offset,
+                p_grid
+            )
+            canvas.drawLine(
+                x_offset,
+                y_offset + y_scale,
+                x_offset + x_scale * length_to_display,
+                y_offset + y_scale,
+                p_grid
+            )
 
             // zero time
-            canvas.drawLine(x_offset + x_scale * (length_to_display / 2), y_offset, x_offset + x_scale * (length_to_display / 2), y_offset + y_scale, p_grid)
+            canvas.drawLine(
+                x_offset + x_scale * (length_to_display / 2),
+                y_offset,
+                x_offset + x_scale * (length_to_display / 2),
+                y_offset + y_scale,
+                p_grid
+            )
             val threshold = app!!.listener!!.threshold.toFloat()
             var y = y_offset + y_scale * (0.5f - 0.5f * threshold)
             // Thresholds
@@ -127,12 +151,23 @@ class WaveformActivity : AppCompatActivity() {
             y = y_offset + y_scale * (0.5f + 0.5f * threshold)
             canvas.drawLine(x_offset, y, x_offset + x_scale * length_to_display, y, p_grid)
             val dead_time = app!!.listener!!.deadTime
-            canvas.drawLine(x_offset + x_scale * (length_to_display / 2 + dead_time), y_offset, x_offset + x_scale * (length_to_display / 2 + dead_time), y_offset + y_scale, p_grid)
+            canvas.drawLine(
+                x_offset + x_scale * (length_to_display / 2 + dead_time),
+                y_offset,
+                x_offset + x_scale * (length_to_display / 2 + dead_time),
+                y_offset + y_scale,
+                p_grid
+            )
             val bars = true
             val ypos = -p.ascent()
             if (app!!.connected) {
                 p.textAlign = Paint.Align.LEFT
-                canvas.drawText(decim.format(app!!.getQueueCPM().toDouble()) + " CPM", (w / 20).toFloat(), ypos, p)
+                canvas.drawText(
+                    decim.format(app!!.getQueueCPM().toDouble()) + " CPM",
+                    (w / 20).toFloat(),
+                    ypos,
+                    p
+                )
                 p.textAlign = Paint.Align.RIGHT
                 canvas.drawText(Integer.toString(app!!.totalCount), (w - w / 20).toFloat(), ypos, p)
             } else {
@@ -156,15 +191,24 @@ class WaveformActivity : AppCompatActivity() {
                             var prev_y = 0f
                             var prev_unfiltered_y = 0f
                             for (i in 0..length_to_display) {
-                                val raw = app!!.listener!!.getFromBufferAt((i + t - length_to_display / 2).toInt()).toInt()
+                                val raw =
+                                    app!!.listener!!.getFromBufferAt((i + t - length_to_display / 2).toInt())
+                                        .toInt()
                                 val normalized = raw / 32767.0f
                                 val v = filter.getValue(normalized)
                                 val unfiltered_y = normalized * 0.5f + 0.5f
                                 y = v * 0.5f + 0.5f
-                                canvas.drawLine((i - 1) * x_scale + x_offset, prev_unfiltered_y * y_scale + y_offset,
-                                        i * x_scale + x_offset, unfiltered_y * y_scale + y_offset, p_uf)
-                                canvas.drawLine((i - 1) * x_scale + x_offset, prev_y * y_scale + y_offset,
-                                        i * x_scale + x_offset, y * y_scale + y_offset, p)
+                                canvas.drawLine(
+                                    (i - 1) * x_scale + x_offset,
+                                    prev_unfiltered_y * y_scale + y_offset,
+                                    i * x_scale + x_offset,
+                                    unfiltered_y * y_scale + y_offset,
+                                    p_uf
+                                )
+                                canvas.drawLine(
+                                    (i - 1) * x_scale + x_offset, prev_y * y_scale + y_offset,
+                                    i * x_scale + x_offset, y * y_scale + y_offset, p
+                                )
                                 prev_y = y
                                 prev_unfiltered_y = unfiltered_y
                             }

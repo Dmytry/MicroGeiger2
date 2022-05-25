@@ -17,26 +17,26 @@
 package com.dmytry.microgeiger2
 
 import android.app.Application
-import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.SharedPreferences
+import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.media.*
 import android.media.MediaRecorder.AudioSource
 import android.os.Build
 import android.os.SystemClock
 import android.preference.PreferenceManager
 import android.util.Log
-import java.lang.NumberFormatException
 import java.util.*
 import kotlin.math.max
 
 class MicroGeiger2App : Application() {
     @JvmField
-	@Volatile
+    @Volatile
     var totalCount = 0
     val minClicksInQueue = 100
+
+    // Minimum queue length in seconds
     val minSmoothingDurationSec = 0.5f
     val sampleRate = 44100
-    val countersUpdateRate = 2 /// sample rate must be divisible by counters update rate
 
     @Volatile
     var totalSampleCount: Long = 0
@@ -44,15 +44,14 @@ class MicroGeiger2App : Application() {
     var countsLog = Vector<Int>()
     var logCountdown = 0
     var logIntervalClickCount = 0
-    val samplesPerUpdate = sampleRate / countersUpdateRate
 
-    //public volatile boolean changed=false;
     @JvmField
-	@Volatile
+    @Volatile
     var changeCount = 0
     var started = false
+
     @JvmField
-	var connected = false
+    var connected = false
 
     class IIRFilter {
         var runningAvg = 0f
@@ -63,43 +62,13 @@ class MicroGeiger2App : Application() {
         }
     }
 
-    inner class Counter internal constructor(n_counts: Int, scale_: Double, name_: String) {
-        var counts: IntArray = IntArray(n_counts)
-        var pos = 0
-
-        @Volatile
-        var count = 0
-        var scale = 1.0
-        var name: String
-        fun push(n: Int) {
-            pos++;
-            if (pos >= counts.size) pos = 0
-            val old_count = count
-            count -= counts[pos]
-            counts[pos] = n
-            count += n
-            if (count != old_count) changeCount++
-        }
-
-        val value: Double
-            get() = scale * count
-
-        init {
-            scale = scale_
-            name = name_
-        }
-    }
-
-    @Volatile
-    var counters = emptyArray<Counter?>()
-
     class Click {
         @JvmField
-		var timeInSamples: Long = 0
+        var timeInSamples: Long = 0
     }
 
     @JvmField
-	@Volatile
+    @Volatile
     var lastNClicks: Deque<Click> = LinkedList()
     fun appendClick(time_in_samples: Long) {
         val c = Click()
@@ -121,7 +90,7 @@ class MicroGeiger2App : Application() {
             if (lastNClicks.size == 0) return 0.0f
             val sc = totalSampleCount
             val duration_in_samples = sc - lastNClicks.first.timeInSamples
-            if (duration_in_samples < 0){
+            if (duration_in_samples < 0) {
                 lastNClicks.clear()
                 return 0.0f
             }
@@ -131,22 +100,23 @@ class MicroGeiger2App : Application() {
         }
     }
 
-    inner class Listener : Runnable, AudioRouting.OnRoutingChangedListener, OnSharedPreferenceChangeListener {
+    inner class Listener : Runnable, AudioRouting.OnRoutingChangedListener,
+        OnSharedPreferenceChangeListener {
         @Volatile
         var doStop = false
         var filter = IIRFilter()
         var currentOffset = 0
-        var inputBuffer = ShortArray(1024*1024)
+        var inputBuffer = ShortArray(1024 * 1024)
         var playbackBuffer = ShortArray(8000)
         var recorder: AudioRecord? = null
         var player: AudioTrack? = null
 
         @JvmField
-		@Volatile
+        @Volatile
         var deadTime = sampleRate / 2000
 
         @JvmField
-		@Volatile
+        @Volatile
         var threshold = 0.1
 
         // High pass filter , peak is reached in 3 samples
@@ -156,7 +126,6 @@ class MicroGeiger2App : Application() {
         var clickCountdown = 0
         var clickDuration = 40
         var clickBeepDivisor = 20
-        var sampleUpdateCounter = 0
         var sampleCount = 0
 
         @Volatile
@@ -170,7 +139,11 @@ class MicroGeiger2App : Application() {
 
         // Circular buffer reading
         // Returns how many bytes were read
-        fun readIntoBuffer(recorder: AudioRecord, wanted_read: Int, blocking: Boolean): Int { // int read_size = recorder.read(input_buffer,0,data_size, AudioRecord.READ_NON_BLOCKING);
+        private fun readIntoBuffer(
+            recorder: AudioRecord,
+            wanted_read: Int,
+            blocking: Boolean
+        ): Int { // int read_size = recorder.read(input_buffer,0,data_size, AudioRecord.READ_NON_BLOCKING);
             // sanitize
             var wanted_read = wanted_read
             if (wanted_read > inputBuffer.size) wanted_read = inputBuffer.size
@@ -180,20 +153,30 @@ class MicroGeiger2App : Application() {
             if (partial) {
                 max_read_size = inputBuffer.size - currentOffset
             }
-            var bytes_read = recorder.read(inputBuffer, currentOffset, max_read_size, if (blocking) AudioRecord.READ_BLOCKING else AudioRecord.READ_NON_BLOCKING)
+            var bytes_read = recorder.read(
+                inputBuffer,
+                currentOffset,
+                max_read_size,
+                if (blocking) AudioRecord.READ_BLOCKING else AudioRecord.READ_NON_BLOCKING
+            )
             var new_offset = currentOffset + bytes_read
             // Wraparound
             if (new_offset >= inputBuffer.size) {
                 new_offset = 0
                 if (partial) { // Wraparound and read was partial, need another read
-                    bytes_read += recorder.read(inputBuffer, new_offset, wanted_read - bytes_read, if (blocking) AudioRecord.READ_BLOCKING else AudioRecord.READ_NON_BLOCKING)
+                    bytes_read += recorder.read(
+                        inputBuffer,
+                        new_offset,
+                        wanted_read - bytes_read,
+                        if (blocking) AudioRecord.READ_BLOCKING else AudioRecord.READ_NON_BLOCKING
+                    )
                 }
             }
             return bytes_read
         }
 
         // Blocking read for min_read plus queue emptying up to max_read
-        fun readAtLeast(recorder: AudioRecord, min_read: Int, max_read: Int): Int {
+        private fun readAtLeast(recorder: AudioRecord, min_read: Int, max_read: Int): Int {
             var result = readIntoBuffer(recorder, min_read, true)
             if (result < max_read) {
                 result += readIntoBuffer(recorder, max_read - result, false)
@@ -202,13 +185,20 @@ class MicroGeiger2App : Application() {
         }
 
         override fun run() {
-            Log.d(TAG, "Run");
+            Log.d(TAG, "Run")
             val sharedPref = PreferenceManager.getDefaultSharedPreferences(applicationContext)
             sharedPref.registerOnSharedPreferenceChangeListener(this)
-            parametersFromConfig
-
-            val record_min_buffer_size = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_FRONT_LEFT or AudioFormat.CHANNEL_OUT_FRONT_RIGHT, AudioFormat.ENCODING_PCM_16BIT)
-            val play_min_buffer_size = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            parametersFromConfig()
+            val record_min_buffer_size = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_FRONT_LEFT or AudioFormat.CHANNEL_OUT_FRONT_RIGHT,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            val play_min_buffer_size = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
             val min_buffer_size = Math.max(record_min_buffer_size, play_min_buffer_size)
 
             val data_size = max(sampleRate / 4, min_buffer_size)
@@ -220,25 +210,37 @@ class MicroGeiger2App : Application() {
             playbackBuffer = ShortArray(data_size * 2)
             val recorder_buffer_size_bytes = 4 * max(sampleRate / 10, min_buffer_size)
             try {
-                recorder = AudioRecord(AudioSource.DEFAULT, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, recorder_buffer_size_bytes)
-                recorder!!.addOnRoutingChangedListener(this, null)
+                recorder = AudioRecord(
+                    AudioSource.DEFAULT,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    recorder_buffer_size_bytes
+                )
+                recorder?.addOnRoutingChangedListener(this, null)
             } catch (ex: SecurityException) {
                 Log.d(TAG, "No audio permission")
                 return
             }
-            player = AudioTrack(AudioManager.STREAM_RING,
-                    sampleRate,  /* AudioFormat.CHANNEL_OUT_MONO */AudioFormat.CHANNEL_OUT_FRONT_LEFT or AudioFormat.CHANNEL_OUT_FRONT_RIGHT,
-                    AudioFormat.ENCODING_PCM_16BIT, 4 * data_size,
-                    AudioTrack.MODE_STREAM)
-            Log.d(TAG, "Output channels: " + player!!.channelCount)
-            player!!.play()
+            if (recorder == null) return
+            player = AudioTrack(
+                AudioManager.STREAM_RING,
+                sampleRate,  /* AudioFormat.CHANNEL_OUT_MONO */
+                AudioFormat.CHANNEL_OUT_FRONT_LEFT or AudioFormat.CHANNEL_OUT_FRONT_RIGHT,
+                AudioFormat.ENCODING_PCM_16BIT,
+                4 * data_size,
+                AudioTrack.MODE_STREAM
+            )
+            if (player == null) return
+            Log.d(TAG, "Output channels: " + player?.channelCount)
+            player?.play()
             try {
                 isPeripheral = checkIfPeripheralIsConnected()
                 while (!doStop) {
                     //getParametersFromConfig();
-                    if (recorder!!.state == AudioRecord.STATE_INITIALIZED) { // check to see if the recorder has initialized yet.
-                        if (recorder!!.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
-                            recorder!!.startRecording()
+                    if (recorder?.state == AudioRecord.STATE_INITIALIZED) { // check to see if the recorder has initialized yet.
+                        if (recorder?.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
+                            recorder?.startRecording()
                         } else {
                             // This is slow for some reason, todo: use events instead
                             if (isPeripheral) {
@@ -248,7 +250,11 @@ class MicroGeiger2App : Application() {
                                 //int read_size = recorder.read(input_buffer,0,data_size, AudioRecord.READ_NON_BLOCKING);
 
                                 // read at least 0.1 seconds of audio
-                                val read_size = readAtLeast(recorder!!, 4410, inputBuffer.size) //readIntoBuffer(recorder, input_buffer.length);
+                                val read_size = readAtLeast(
+                                    recorder!!,
+                                    4410,
+                                    inputBuffer.size
+                                ) //readIntoBuffer(recorder, input_buffer.length);
                                 val end_t_ = SystemClock.elapsedRealtime()
                                 //Log.d(TAG, "Read: "+read_size+" duration="+(end_t_-start_t_)+" t="+end_t_);
                                 val old_total_count = totalCount
@@ -267,7 +273,13 @@ class MicroGeiger2App : Application() {
                                 }
                                 Thread.sleep(500)
                                 try {
-                                    recorder = AudioRecord(AudioSource.DEFAULT, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, recorder_buffer_size_bytes)
+                                    recorder = AudioRecord(
+                                        AudioSource.DEFAULT,
+                                        sampleRate,
+                                        AudioFormat.CHANNEL_IN_MONO,
+                                        AudioFormat.ENCODING_PCM_16BIT,
+                                        recorder_buffer_size_bytes
+                                    )
                                     recorder!!.addOnRoutingChangedListener(this, null)
                                 } catch (ex: SecurityException) {
                                     Log.d(TAG, "No audio permission")
@@ -303,7 +315,11 @@ class MicroGeiger2App : Application() {
                 how_much_to_write -= 2
                 var wrote_size = 0
                 if (how_much_to_write > 0) {
-                    wrote_size = player!!.write(playbackBuffer, 0, how_much_to_write) // , AudioTrack.WRITE_NON_BLOCKING
+                    wrote_size = player!!.write(
+                        playbackBuffer,
+                        0,
+                        how_much_to_write
+                    ) // , AudioTrack.WRITE_NON_BLOCKING
                 }
                 val end_t = SystemClock.elapsedRealtime()
                 //Log.d(TAG, "Time to write: "+(end_t-start_t));
@@ -312,7 +328,8 @@ class MicroGeiger2App : Application() {
 
         private fun processInputDataAndGenerateClicks(read_size: Int, playback_data: ShortArray) {
             var i = 0
-            var click_v = (Math.exp((clickVolume - 1.0) * Math.log(10000.0)) * 32767).toInt().toShort()
+            var click_v =
+                (Math.exp((clickVolume - 1.0) * Math.log(10000.0)) * 32767).toInt().toShort()
             while (i < read_size) {
                 if (deadCountdown > 0) {
                     deadCountdown--
@@ -320,7 +337,7 @@ class MicroGeiger2App : Application() {
                 if (i * 2 + 1 < playback_data.size) {
                     if (clickCountdown > 0) {
                         clickCountdown--
-                        playback_data[i * 2] = if(i%2 == 0) click_v else 0
+                        playback_data[i * 2] = if (i % 2 == 0) click_v else 0
                         playback_data[i * 2 + 1] = playback_data[i * 2]
                     } else {
                         //playback_data[i]=0;
@@ -330,15 +347,6 @@ class MicroGeiger2App : Application() {
                         playback_data[i * 2] = beep
                         playback_data[i * 2 + 1] = beep
                     }
-                }
-                sampleUpdateCounter++
-                if (sampleUpdateCounter >= samplesPerUpdate) {
-                    for (j in counters.indices) {
-                        counters[j]!!.push(sampleCount)
-                    }
-                    sampleUpdateCounter = 0
-                    sampleCount = 0
-                    //Log.d(TAG, "got a sample");
                 }
                 val raw_v = inputBuffer[currentOffset] * (1.0f / 32768.0f)
                 val v = filter.getValue(raw_v)
@@ -372,13 +380,13 @@ class MicroGeiger2App : Application() {
         }
 
         private fun checkIfPeripheralIsConnected(): Boolean {
-            if(recorder == null)return false
+            if (recorder == null) return false
             var is_peripheral = false
             var checked_peripheral = false
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val microphones = recorder?.activeMicrophones
-                    if (microphones !=null) {
+                    if (microphones != null) {
                         for (m in microphones) {
                             val l = m.location
                             if (l == MicrophoneInfo.LOCATION_UNKNOWN || l == MicrophoneInfo.LOCATION_PERIPHERAL) {
@@ -393,47 +401,40 @@ class MicroGeiger2App : Application() {
             }
             // if we were unable to determine if microphone is peripheral, fallback to wired headset check
             if (!checked_peripheral) {
-                is_peripheral = (applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager).isWiredHeadsetOn
+                is_peripheral =
+                    (applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager).isWiredHeadsetOn
             }
             return is_peripheral
         }
 
-        private val parametersFromConfig: Unit
-            private get() {
-                val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
-                try {
-                    threshold = prefs.getString("threshold", "")!!.toDouble()
-                } catch (e: NumberFormatException) {
-                }
-                try {
-                    deadTime = (0.001 * sampleRate * prefs.getString("dead_time", "")!!.toDouble()).toInt()
-                } catch (e: NumberFormatException) {
-                }
-                try {
-                    clickVolume = prefs.getInt("int_click_volume2", 100) / 100.0f
-                } catch (e: NumberFormatException) {
-                }
+        private fun parametersFromConfig() {
+            val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
+            try {
+                threshold = prefs.getString("threshold", "")!!.toDouble()
+            } catch (e: NumberFormatException) {
             }
+            try {
+                deadTime =
+                    (0.001 * sampleRate * prefs.getString("dead_time", "")!!.toDouble()).toInt()
+            } catch (e: NumberFormatException) {
+            }
+            try {
+                clickVolume = prefs.getInt("int_click_volume2", 100) / 100.0f
+            } catch (e: NumberFormatException) {
+            }
+        }
 
         override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, s: String) {
-            parametersFromConfig
+            parametersFromConfig()
         }
     }
 
     @JvmField
-	var listener: Listener? = null
+    var listener: Listener? = null
     var listenerThread: Thread? = null
-    fun initCounters() {
-        counters = arrayOfNulls(4)
-        counters[0] = Counter(countersUpdateRate * 5, 12.0, " CPM in last 5 sec")
-        counters[1] = Counter(countersUpdateRate * 30, 2.0, " CPM in last 30 sec")
-        counters[2] = Counter(countersUpdateRate * 120, 0.5, " CPM in last 2 min")
-        counters[3] = Counter(countersUpdateRate * 600, 0.1, " CPM in last 10 min")
-    }
 
     fun start() {
         if (!started) {
-            initCounters()
             if (listenerThread == null) {
                 listener = Listener()
                 listenerThread = Thread(listener)
@@ -445,7 +446,6 @@ class MicroGeiger2App : Application() {
 
     fun reset() {
         totalCount = 0
-        initCounters()
         changeCount++
         lastNClicks.clear()
     }

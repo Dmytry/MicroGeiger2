@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
             R.id.action_quit -> {
                 //app?.stop()
                 //finish()
-                finishAndRemoveTask();
+                finishAndRemoveTask()
                 app?.stop()
                 true
             }
@@ -65,18 +65,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val requestPermissionLauncher = registerForActivityResult(RequestPermission()) { isGranted: Boolean ->
-        if (isGranted) {
-            // Permission is granted. Continue the action or workflow in your
-            // app.
-        } else {
-            // Explain to the user that the feature is unavailable because the
-            // features requires a permission that the user has denied. At the
-            // same time, respect the user's decision. Don't link to system
-            // settings in an effort to convince the user to change their
-            // decision.
+    private val requestPermissionLauncher =
+        registerForActivityResult(RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                // Permission is granted. Continue the action or workflow in your
+                // app.
+            } else {
+                // Explain to the user that the feature is unavailable because the
+                // features requires a permission that the user has denied. At the
+                // same time, respect the user's decision. Don't link to system
+                // settings in an effort to convince the user to change their
+                // decision.
+            }
         }
-    }
     var changeCount = 0
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,9 +87,13 @@ class MainActivity : AppCompatActivity() {
         //setContentView(R.layout.activity_main);
         setContentView(panel)
         handler = Handler()
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestPermissionLauncher.launch(
-                    Manifest.permission.RECORD_AUDIO
+                Manifest.permission.RECORD_AUDIO
             )
         }
         app = application as MicroGeiger2App
@@ -154,19 +159,42 @@ class MainActivity : AppCompatActivity() {
 
             // Outer box for graph
             canvas.drawLine(x_offset, y_offset, x_offset, y_offset + y_scale, p_grid)
-            canvas.drawLine(x_offset + x_scale * x_steps, y_offset, x_offset + x_scale * x_steps, y_offset + y_scale, p_grid)
+            canvas.drawLine(
+                x_offset + x_scale * x_steps,
+                y_offset,
+                x_offset + x_scale * x_steps,
+                y_offset + y_scale,
+                p_grid
+            )
             canvas.drawLine(x_offset, y_offset, x_offset + x_scale * x_steps, y_offset, p_grid)
-            canvas.drawLine(x_offset, y_offset + y_scale, x_offset + x_scale * x_steps, y_offset + y_scale, p_grid)
+            canvas.drawLine(
+                x_offset,
+                y_offset + y_scale,
+                x_offset + x_scale * x_steps,
+                y_offset + y_scale,
+                p_grid
+            )
             val bars = true
 
             // Linear 1..9 scale
             for (j in 1..9) {
                 val y = y_offset + CountToY(j.toFloat()) * y_scale
-                canvas.drawLine(x_offset, y, x_offset + x_scale * x_steps, y, if (j == 5) p_grid_half else p_grid_m)
+                canvas.drawLine(
+                    x_offset,
+                    y,
+                    x_offset + x_scale * x_steps,
+                    y,
+                    if (j == 5) p_grid_half else p_grid_m
+                )
             }
             val text_y_offset = 0.5f * (p_grid.descent() + p_grid.ascent())
             canvas.drawText("0", x_offset - 5, y_offset - text_y_offset, p_grid)
-            canvas.drawText("50", x_offset - 5, y_offset + CountToY(5f) * y_scale - text_y_offset, p_grid)
+            canvas.drawText(
+                "50",
+                x_offset - 5,
+                y_offset + CountToY(5f) * y_scale - text_y_offset,
+                p_grid
+            )
 
 
             // Main ticks for log scale, starting at 10
@@ -174,24 +202,45 @@ class MainActivity : AppCompatActivity() {
                 val base_num = Math.pow(10.0, i.toDouble()).toFloat()
                 var y = y_offset + i / 5.0f * y_scale
                 canvas.drawLine(x_offset, y, x_offset + x_scale * x_steps, y, p_grid)
-                canvas.drawText(labelFormat(base_num.toInt() * count_to_cpm_scale), x_offset - 5, y - text_y_offset, p_grid)
+                canvas.drawText(
+                    labelFormat(base_num.toInt() * count_to_cpm_scale),
+                    x_offset - 5,
+                    y - text_y_offset,
+                    p_grid
+                )
                 if (i < 5) {
                     for (j in 2..9) {
                         y = y_offset + CountToY(j * base_num) * y_scale
-                        canvas.drawLine(x_offset, y, x_offset + x_scale * x_steps, y, if (j == 5) p_grid_half else p_grid_m)
+                        canvas.drawLine(
+                            x_offset,
+                            y,
+                            x_offset + x_scale * x_steps,
+                            y,
+                            if (j == 5) p_grid_half else p_grid_m
+                        )
                     }
 
                     // Labels for a few ticks
                     for (j in 2..5) {
                         y = y_offset + CountToY(j * base_num) * y_scale
-                        canvas.drawText(labelFormat((j * base_num * count_to_cpm_scale).toInt()), x_offset - 5, y - text_y_offset, p_grid)
+                        canvas.drawText(
+                            labelFormat((j * base_num * count_to_cpm_scale).toInt()),
+                            x_offset - 5,
+                            y - text_y_offset,
+                            p_grid
+                        )
                     }
                 }
             }
             val ypos = -p.ascent()
             if (app!!.connected) {
                 p.textAlign = Paint.Align.LEFT
-                canvas.drawText(decim.format(app!!.getQueueCPM().toDouble()) + " CPM", (w / 20).toFloat(), ypos, p)
+                canvas.drawText(
+                    decim.format(app!!.getQueueCPM().toDouble()) + " CPM",
+                    (w / 20).toFloat(),
+                    ypos,
+                    p
+                )
                 p.textAlign = Paint.Align.RIGHT
                 canvas.drawText(Integer.toString(app!!.totalCount), (w - w / 20).toFloat(), ypos, p)
             } else {
@@ -218,15 +267,22 @@ class MainActivity : AppCompatActivity() {
                     val y = CountToY(count)
                     if (bars) {
                         if (count > 0) {
-                            canvas.drawRect((i - 1) * x_scale + x_offset,
-                                    y * y_scale + y_offset,
-                                    i * x_scale + x_offset,
-                                    y_offset,
-                                    p
+                            canvas.drawRect(
+                                (i - 1) * x_scale + x_offset,
+                                y * y_scale + y_offset,
+                                i * x_scale + x_offset,
+                                y_offset,
+                                p
                             )
                         }
                     } else {
-                        canvas.drawLine((i - 1) * x_scale + x_offset, prev_y * y_scale + y_offset, i * x_scale + x_offset, y * y_scale + y_offset, p)
+                        canvas.drawLine(
+                            (i - 1) * x_scale + x_offset,
+                            prev_y * y_scale + y_offset,
+                            i * x_scale + x_offset,
+                            y * y_scale + y_offset,
+                            p
+                        )
                     }
                     prev_y = y
                 }
