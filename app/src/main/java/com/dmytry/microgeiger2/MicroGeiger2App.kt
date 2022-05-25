@@ -231,7 +231,11 @@ class MicroGeiger2App : Application() {
                 4 * data_size,
                 AudioTrack.MODE_STREAM
             )
-            if (player == null) return
+            if (player == null){
+                recorder?.stop()
+                recorder?.release()
+                return
+            }
             Log.d(TAG, "Output channels: " + player?.channelCount)
             player?.play()
             try {
@@ -267,10 +271,9 @@ class MicroGeiger2App : Application() {
                             } else { /// wired headset is not on
                                 if (connected) changeCount++
                                 connected = false
-                                if (recorder != null) {
-                                    recorder!!.stop()
-                                    recorder!!.release()
-                                }
+                                recorder?.stop()
+                                recorder?.release()
+
                                 Thread.sleep(500)
                                 try {
                                     recorder = AudioRecord(
@@ -280,7 +283,7 @@ class MicroGeiger2App : Application() {
                                         AudioFormat.ENCODING_PCM_16BIT,
                                         recorder_buffer_size_bytes
                                     )
-                                    recorder!!.addOnRoutingChangedListener(this, null)
+                                    recorder?.addOnRoutingChangedListener(this, null)
                                 } catch (ex: SecurityException) {
                                     Log.d(TAG, "No audio permission")
                                     return
@@ -296,10 +299,10 @@ class MicroGeiger2App : Application() {
                 }
             } catch (e: InterruptedException) {
             } finally {
-                recorder!!.stop()
-                recorder!!.release()
-                player!!.stop()
-                player!!.release()
+                recorder?.stop()
+                recorder?.release()
+                player?.stop()
+                player?.release()
             }
         }
 
